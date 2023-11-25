@@ -69,6 +69,10 @@ def create_character_dataset(X_train: list, y_train: list, X_test: list, y_test:
     X_train_concat = np.concatenate(X_train, axis=1).transpose()
     X_test_concat = np.concatenate(X_test, axis=1).transpose()
 
+    # Add ones for bias
+    X_train_concat = np.concatenate([X_train_concat, np.ones((X_train_concat.shape[0], 1))], axis=1)
+    X_test_concat = np.concatenate([X_test_concat, np.ones((X_test_concat.shape[0], 1))], axis=1)
+
     # map characters to integers
     y_train_ = np.array([], dtype=np.uint8)
     for i in range(len(y_train)):
@@ -189,14 +193,32 @@ def perceptron_algorithm_1(X: np.ndarray, y: np.ndarray, num_classes: int) -> np
     num_features = X.shape[1]
 
     W = np.zeros([num_features, num_classes])
-    for i in range(num_samples):
-        scores = np.dot(X[i], W)
-        y_pred = np.argmax(scores)
-        y_true = y[i]
-        if y_pred != y_true:
-            W[:, y_true] += X[i]
-            W[:, y_pred] -= X[i]
+    while True:
+        end = True
+        for i in range(num_samples):
+            scores = np.dot(X[i], W)
+            y_pred = np.argmax(scores)
+            y_true = y[i]
+            if y_pred != y_true:
+                W[:, y_true] += X[i]
+                W[:, y_pred] -= X[i]
+                end = False
+        if end:
+            break
     return W
+
+
+def evaluate_task_1(X_test, y_test, W):
+    num_samples = X_test.shape[0]
+    num_features = X_test.shape[1]
+
+    y_pred = np.zeros([num_samples])
+    for i in range(num_samples):
+        scores = np.dot(X_test[i], W)
+        y_pred[i] = np.argmax(scores)
+
+    accuracy = np.sum(y_pred == y_test) / num_samples
+    return accuracy
 
 
 
