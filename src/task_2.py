@@ -12,7 +12,7 @@ class LSCPairWiseDependency:
 
         # Model
         self.W = np.zeros([self.num_features, self.num_letters], dtype=np.float32)
-        self.g = np.zeros([self.num_letters, self.num_letters], dtype=np.float32)
+        self.G = np.zeros([self.num_letters, self.num_letters], dtype=np.float32)
 
     @property
     def num_letters(self):
@@ -76,7 +76,30 @@ class LSCPairWiseDependency:
                 break
         print(f"Training completed with train accuracy: {self.evaluate_train()}")
 
+
     def predict(self, X: np.ndarray) -> np.ndarray:
+        name_length = len(X)
+        y_pred = np.zeros(name_length, dtype=np.uint8)
+
+        Q = np.dot(X, self.W)  # (name_length, num_letters)
+        F = np.zeros_like(Q)
+
+        # In first iteration assign to each node the maximum
+        # cost of the path from the start node to it (F)
+        F[0] = Q[0]
+        for i in range(1, name_length):
+            F[i] = Q[i] + np.max(F[i - 1][:, np.newaxis] + self.G, axis=0)
+
+        # Now search with the greedy algorithm the path with the
+        # maximum cost from the end node to the start node
+        y_pred[-1] = np.argmax(F[-1])
+        for i in range(name_length - 2, -1, -1):
+            y_pred[i] = np.argmax(F[i] + self.G[:, y_pred[i + 1]])
+
+        return y_pred
+
+
+    def predict_old(self, X: np.ndarray) -> np.ndarray:
         y_pred = np.zeros(len(X), dtype=np.uint8)
 
         scores = np.dot(X, self.W)
@@ -94,8 +117,8 @@ class LSCPairWiseDependency:
             self.W[:, int(y_pred[i])] -= X[i]
 
             if i > 0:
-                self.g[int(y_true[i-1]), int(y_true[i])] += 1
-                self.g[int(y_pred[i-1]), int(y_pred[i])] -= 1
+                self.G[int(y_true[i-1]), int(y_true[i])] += 1
+                self.G[int(y_pred[i-1]), int(y_pred[i])] -= 1
 
     def evaluate_test(self) -> float:
         correct = np.zeros([self.num_test_samples])

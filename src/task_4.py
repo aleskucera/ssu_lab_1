@@ -2,7 +2,7 @@ import numpy as np
 
 
 class StructuredOutputSVM:
-    def __init__(self, X_train: list, y_train: list, X_test: list, y_test: list, mapping: dict):
+    def __init__(self, X_train: list, y_train: list, X_test: list, y_test: list, mapping: dict, lambda_: float = 0.1, learning_rate: float = 1):
         # Dataset
         self.X_train, self.y_train = None, None
         self.X_test, self.y_test = None, None
@@ -11,8 +11,11 @@ class StructuredOutputSVM:
         self.create_dataset(X_train, y_train, X_test, y_test)
 
         # Model
-        self.W = np.zeros([self.num_features, self.num_letters], dtype=np.float32)
-        self.g = np.zeros([self.num_letters, self.num_letters], dtype=np.float32)
+        self.W = np.random.rand(self.num_features, self.num_letters)
+        self.G = np.random.rand(self.num_letters, self.num_letters)
+
+        self.lambda_ = lambda_
+        self.learning_rate = learning_rate
 
     @property
     def num_letters(self):
@@ -60,38 +63,77 @@ class StructuredOutputSVM:
             self.y_test.append(letters)
 
     def train(self):
+        loss = 0
         for epoch in range(100):
             for i in range(self.num_train_samples):
                 sample, label = self.X_train[i], self.y_train[i]
                 prediction = self.predict(self.X_train[i])
-                loss = self.loss(sample, label, prediction)
+                loss, gradient = self.loss(sample, label, prediction)
                 if not np.array_equal(label, prediction):
-                    self.update(sample, label, prediction)
+                    self.update(gradient)
             if epoch % 10 == 0:
+                print(f"Train loss on epoch {epoch}: {loss}")
                 print(f"Train accuracy on epoch {epoch}: {self.evaluate_train()}")
         print(f"Training completed with train accuracy: {self.evaluate_train()}")
 
-    def loss(self, sample, label, prediction):
-        return None
-    def predict(self, X: np.ndarray) -> np.ndarray:
-        y_pred = np.zeros(len(X), dtype=np.uint8)
+    def loss(self, X: np.ndarray, y_true: np.ndarray, y_pred: np.ndarray) -> tuple:
+        """Compute the loss of the prediction along with the gradient
+        of the loss with respect to the weights.
 
-        scores = np.dot(X, self.W)
-        for i in range(1, len(X)):
-            y_pred[i - 1] = np.argmax(scores[i - 1])
-            scores[i] += self.g[y_pred[i - 1]]
+        Loss: Loss of the prediction is the number of letters that are not predicted correctly (hamming loss) with the
+        addition of the regularization term lambda * ||W||^2.
 
-        y_pred[-1] = np.argmax(scores[-1])
-        return y_pred.astype(np.uint8)
+        Gradient: The gradient of the loss with respect to the weights is computed as follows:
+        1. For each letter that is not predicted correctly, add the feature vector of the letter to the gradient.
+        2. Add the regularization term lambda * W to the gradient.
+        3
 
-    def update(self, X: np.ndarray, y_true: np.ndarray, y_pred: np.ndarray) -> None:
+
+        Args:
+            X: feature vector of the name
+            y_true: true label of the name
+            y_pred: predicted label of the name
+
+        Returns:
+            loss: loss of the prediction
+            grad: gradient of the loss with respect to the weights
+        """
+
+        loss = np.sum(y_true != y_pred) + self.lambda_ * np.linalg.norm(self.W) ** 2
+        grad = dict(W=np.zeros_like(self.W), G=np.zeros_like(self.G))
         for i in range(len(X)):
-            self.W[:, int(y_true[i])] += X[i]
-            self.W[:, int(y_pred[i])] -= X[i]
+            if y_true[i] != y_pred[i]:
+                grad['W'][:, int(y_pred[i])] -= X[i]
+                if i > 0:
+                    grad['G'][int(y_pred[i-1]), int(y_pred[i])] -= 1
+        grad['W'] += self.lambda_ * self.W
+        grad['G'] += self.lambda_ * self.G
+        return loss, grad
 
-            if i > 0:
-                self.g[int(y_true[i - 1]), int(y_true[i])] += 1
-                self.g[int(y_pred[i - 1]), int(y_pred[i])] -= 1
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        name_length = len(X)
+        y_pred = np.zeros(name_length, dtype=np.uint8)
+
+        Q = np.dot(X, self.W)  # (name_length, num_letters)
+        F = np.zeros_like(Q)
+
+        # In first iteration assign to each node the maximum
+        # cost of the path from the start node to it (F)
+        F[0] = Q[0]
+        for i in range(1, name_length):
+            F[i] = Q[i] + np.max(F[i - 1][:, np.newaxis] + self.G, axis=0)
+
+        # Now search with the greedy algorithm the path with the
+        # maximum cost from the end node to the start node
+        y_pred[-1] = np.argmax(F[-1])
+        for i in range(name_length - 2, -1, -1):
+            y_pred[i] = np.argmax(F[i] + self.G[:, y_pred[i + 1]])
+
+        return y_pred
+
+    def update(self, grad: np.ndarray) -> None:
+        self.W -= self.learning_rate * grad['W']
+        self.G -= self.learning_rate * grad['G']
 
     def evaluate_test(self) -> float:
         correct = np.zeros([self.num_test_samples])
