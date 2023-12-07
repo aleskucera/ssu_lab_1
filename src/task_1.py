@@ -8,6 +8,8 @@ class IndependentLinearClassifier:
         self.X_train, self.y_train = None, None
         self.X_test, self.y_test = None, None
 
+        self.y_test_original = y_test
+
         self.mapping = mapping
         self.create_dataset(X_train, y_train, X_test, y_test)
 
@@ -30,6 +32,13 @@ class IndependentLinearClassifier:
     @property
     def num_test_samples(self):
         return self.X_test.shape[0]
+
+    def letters(self, y: int):
+        """Return the indices of the letters of a given name in the dataset.
+        """
+        name = self.mapping['names_inverse'][y]
+        indices = [int(self.mapping['characters'][c]) for c in name]
+        return np.array(indices, dtype=np.uint8)
 
 
     def create_dataset(self, X_train: list, y_train: list, X_test: list, y_test: list) -> None:
@@ -91,6 +100,33 @@ class IndependentLinearClassifier:
     def predict(self, x: np.ndarray) -> np.ndarray:
         scores = np.dot(x, self.W)
         return np.argmax(scores)
+
+    def seq_error(self) -> float:
+        error = 0
+        num_samples = len(self.y_test_original)
+
+        X, y = self.X_test, self.y_test
+
+        # Split the y into the lists names for comparison to the original names
+        y = np.split(y, np.cumsum([len(name) for name in self.y_test_original])[:-1])
+        X = np.split(X, np.cumsum([len(name) for name in self.y_test_original])[:-1])
+
+        for i in range(num_samples):
+            for j in range(len(y[i])):
+                if y[i][j] != self.predict(X[i][j]):
+                    error += 1
+                    break
+
+        return error / num_samples
+
+    def char_error(self) -> float:
+        error = 0
+        num_samples = self.num_test_samples
+        X, y = self.X_test, self.y_test
+        for i in range(num_samples):
+            prediction = self.predict(X[i])
+            error += prediction != y[i]
+        return error / num_samples
 
     def evaluate_test(self):
         y_pred = np.zeros([self.num_test_samples])

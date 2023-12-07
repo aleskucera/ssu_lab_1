@@ -99,18 +99,6 @@ class LSCPairWiseDependency:
         return y_pred
 
 
-    def predict_old(self, X: np.ndarray) -> np.ndarray:
-        y_pred = np.zeros(len(X), dtype=np.uint8)
-
-        scores = np.dot(X, self.W)
-        for i in range(1, len(X)):
-            y_pred[i-1] = np.argmax(scores[i-1])
-            scores[i] += self.g[y_pred[i-1]]
-
-        y_pred[-1] = np.argmax(scores[-1])
-        return y_pred.astype(np.uint8)
-
-
     def update(self, X: np.ndarray, y_true: np.ndarray, y_pred: np.ndarray) -> None:
         for i in range(len(X)):
             self.W[:, int(y_true[i])] += X[i]
@@ -119,6 +107,29 @@ class LSCPairWiseDependency:
             if i > 0:
                 self.G[int(y_true[i-1]), int(y_true[i])] += 1
                 self.G[int(y_pred[i-1]), int(y_pred[i])] -= 1
+
+
+    def seq_error(self) -> float:
+        error = 0
+        num_samples = self.num_test_samples
+        X, y = self.X_test, self.y_test
+
+        for i in range(num_samples):
+            prediction = self.predict(X[i])
+            error += not np.array_equal(prediction, y[i])
+
+        return error / num_samples
+
+    def char_error(self) -> float:
+        error = 0
+        num_samples = self.num_test_samples
+        X, y = self.X_test, self.y_test
+        M = 0
+        for i in range(num_samples):
+            prediction = self.predict(X[i])
+            error += np.sum(prediction != y[i])
+            M += len(y[i])
+        return error / M
 
     def evaluate_test(self) -> float:
         correct = np.zeros([self.num_test_samples])

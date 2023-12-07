@@ -103,6 +103,30 @@ class LSCForFixedNumberOfSequences:
         self.v[y_true] += 1
         self.v[y_pred] -= 1
 
+    def seq_error(self) -> float:
+        error = 0
+        num_samples = self.num_test_samples
+        X, y = self.X_test, self.y_test
+
+        for i in range(num_samples):
+            prediction = self.predict(X[i])
+            error += prediction != y[i]
+
+        return error / num_samples
+
+    def char_error(self) -> float:
+        error = 0
+        num_samples = self.num_test_samples
+        X, y = self.X_test, self.y_test
+        M = 0
+        for i in range(num_samples):
+            prediction = self.predict(X[i])
+            y_pred = self.letters(prediction)
+            y_true = self.letters(y[i])
+            error += np.sum(y_pred != y_true)
+            M += len(y_true)
+        return error / M
+
     def evaluate_test(self):
         y_pred = np.zeros([self.num_test_samples])
         for i in range(self.num_test_samples):
